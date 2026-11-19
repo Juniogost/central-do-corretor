@@ -650,6 +650,80 @@ function renderPost(){
   });
 }
 
+
+/* ---------------- PAINEL DE MERCADO ---------------- */
+var painelOrd = 'm2';
+
+function statsBundle(b){
+  var rows=b.rows.map(function(r){ return {r:r, preco:num(r.cash_value_brl), area:num(r.area_m2), desc:num(r.discount_brl)}; })
+    .filter(function(it){ return it.preco>0 && it.area>0; });
+  if(!rows.length) return null;
+  var m2=rows.map(function(it){return it.preco/it.area;});
+  var iMenor=0, iMaior=0, iBarato=0, iDesc=0;
+  rows.forEach(function(it,i){
+    if(m2[i]<m2[iMenor]) iMenor=i;
+    if(m2[i]>m2[iMaior]) iMaior=i;
+    if(it.preco<rows[iBarato].preco) iBarato=i;
+    if(it.desc>rows[iDesc].desc) iDesc=i;
+  });
+  var areas=rows.map(function(it){return it.area;});
+  var ticket=rows.reduce(function(a,it){return a+it.preco;},0)/rows.length;
+  return {b:b, n:rows.length,
+    areaMin:Math.min.apply(null,areas), areaMax:Math.max.apply(null,areas),
+    m2Min:m2[iMenor], m2Max:m2[iMaior], ticket:ticket,
+    melhor:rows[iMenor], barato:rows[iBarato], desconto:rows[iDesc]};
+}
+
+function renderPainel(){
+  var stats=DADOS.bundles.map(statsBundle).filter(Boolean);
+  var ordFns={
+    m2:function(a,b){return a.m2Min-b.m2Min;},
+    preco:function(a,b){return a.barato.preco-b.barato.preco;},
+    ticket:function(a,b){return a.ticket-b.ticket;},
+    desconto:function(a,b){return b.desconto.desc-a.desconto.desc;}
+  };
+  stats.sort(ordFns[painelOrd]||ordFns.m2);
+  var todos=[]; DADOS.bundles.forEach(function(b){ b.rows.forEach(function(r){ var p=num(r.cash_value_brl),a=num(r.area_m2); if(p>0&&a>0) todos.push({b:b,r:r,m2:p/a,preco:p,desc:num(r.discount_brl)}); }); });
+  var menorM2=todos.reduce(function(m,it){return it.m2<m.m2?it:m;},todos[0]);
+  var maiorDesc=todos.reduce(function(m,it){return it.desc>m.desc?it:m;},todos[0]);
+  var ticketGeral=todos.reduce(function(a,it){return a+it.preco;},0)/todos.length;
+  app.innerHTML =
+    '<h1>Painel de mercado</h1>'+
+    '<p class="sub">Radiografia das tabelas oficiais de novembro/2026. Tudo calculado dos PDFs recebidos da loteadora.</p>'+
+    '<div class="grade3">'+
+      '<div class="cartao"><div class="det">Lotes nas tabelas</div><div style="font-size:26px;font-weight:800">'+todos.length+'</div><div class="det">'+DADOS.bundles.length+' loteamentos</div></div>'+
+      '<div class="cartao"><div class="det">Melhor R$/m²</div><div style="font-size:26px;font-weight:800;color:var(--bronze)">'+brl(menorM2.m2)+'</div><div class="det">'+esc(rotuloCurto(menorM2.b))+' · Q'+menorM2.r.quadra+' L'+menorM2.r.lote+'</div></div>'+
+      '<div class="cartao"><div class="det">Ticket médio à vista</div><div style="font-size:26px;font-weight:800">'+brl(ticketGeral)+'</div><div class="det">considerando todos os lotes</div></div>'+
+      (maiorDesc.desc>0 ? '<div class="cartao"><div class="det">Maior desconto</div><div style="font-size:26px;font-weight:800;color:#1f6b3a">'+brl(maiorDesc.desc)+'</div><div class="det">'+esc(rotuloCurto(maiorDesc.b))+' · Q'+maiorDesc.r.quadra+' L'+maiorDesc.r.lote+'</div></div>' : '')+
+    '</div>'+
+    '<h2>Ordenar por</h2>'+
+    '<div class="chips">'+
+      '<button class="chip'+(painelOrd==='m2'?' ativa':'')+'" data-ord="m2">Melhor R$/m²</button>'+
+      '<button class="chip'+(painelOrd==='preco'?' ativa':'')+'" data-ord="preco">Menor valor</button>'+
+      '<button class="chip'+(painelOrd==='ticket'?' ativa':'')+'" data-ord="ticket">Menor ticket médio</button>'+
+      '<button class="chip'+(painelOrd==='desconto'?' ativa':'')+'" data-ord="desconto">Maior desconto</button>'+
+    '</div>'+
+    stats.map(function(st,i){
+      return '<div class="cartao">'+
+        '<div class="cliente-topo"><h3>'+(i+1)+'º · '+esc(rotuloCurto(st.b))+'</h3><span class="pill hoje">'+st.n+' lotes</span></div>'+
+        '<div class="det" style="margin:6px 0 10px">Áreas de '+st.areaMin.toLocaleString('pt-BR')+' a '+st.areaMax.toLocaleString('pt-BR')+' m² · ticket médio '+brl(st.ticket)+'</div>'+
+        '<div class="dois">'+
+          '<div><div class="det">Melhor R$/m²</div><div style="font-weight:800;color:var(--bronze)">'+brl(st.m2Min)+'/m²</div><div class="det">Q'+st.melhor.r.quadra+' L'+st.melhor.r.lote+' · '+brl(st.melhor.preco)+'</div></div>'+
+          '<div><div class="det">Menor valor à vista</div><div style="font-weight:800">'+brl(st.barato.preco)+'</div><div class="det">Q'+st.barato.r.quadra+' L'+st.barato.r.lote+' · '+st.barato.area.toLocaleString('pt-BR')+' m²</div></div>'+
+        '</div>'+
+        (st.desconto.desc>0 ? '<div class="det" style="margin-top:8px;color:#1f6b3a;font-weight:600">Maior desconto: '+brl(st.desconto.desc)+' (Q'+st.desconto.r.quadra+' L'+st.desconto.r.lote+')</div>' : '')+
+        '<div style="margin-top:10px"><button class="botao fantasma meio" data-ver="'+st.b.id+'">Ver tabela</button></div>'+
+      '</div>';
+    }).join('')+
+    '<div class="aviso verde">Leitura interna para você argumentar com o cliente. Os valores são das tabelas novembro/2026; disponibilidade sempre sob confirmação.</div>';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ord]'),function(c){
+    c.addEventListener('click',function(){ painelOrd=c.getAttribute('data-ord'); renderPainel(); });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-ver]'),function(c){
+    c.addEventListener('click',function(){ irParaTabela(c.getAttribute('data-ver')); });
+  });
+}
+
 /* ---------------- HOME ---------------- */
 function renderHome(){
   var total = DADOS.bundles.reduce(function(a,b){return a+b.rows.length;},0);
@@ -662,6 +736,7 @@ function renderHome(){
     '<div class="cartao cartao-toque" data-go="post"><h3>📣 Post do dia</h3><div class="det">Imagem pronta do lote em destaque para você postar</div></div>'+
     '<div class="cartao cartao-toque" data-go="tabelas"><h3>📋 Tabelas</h3><div class="det">'+DADOS.bundles.length+' loteamentos · '+total+' lotes · tabelas novembro/2026</div></div>'+
     '<div class="cartao cartao-toque" data-go="followup"><h3>📞 Follow-up</h3><div class="det">Quem chamar hoje, com link direto pro WhatsApp</div></div>'+
+    '<div class="cartao cartao-toque" data-go="painel"><h3>📊 Painel</h3><div class="det">Raio-x das tabelas: melhor R$/m², menor valor, maiores descontos</div></div>'+
     '<div class="cartao cartao-toque" data-go="comissao"><h3>🧮 Comissão</h3><div class="det">Quanto você ganha por venda, do seu jeito</div></div>'+
     '</div>'+
     '<div class="aviso verde" style="margin-top:14px">Versão de testes para apresentação. Os dados das tabelas vêm dos PDFs oficiais recebidos da loteadora; a disponibilidade de cada lote é confirmada na hora da venda.</div>';
@@ -680,6 +755,7 @@ function rota(){
   if(nome==='tabelas') renderTabelas();
   else if(nome==='mapa') renderMapa();
   else if(nome==='post') renderPost();
+  else if(nome==='painel') renderPainel();
   else if(nome==='radar') renderRadar();
   else if(nome==='followup') renderFollowup();
   else if(nome==='comissao') renderComissao();
