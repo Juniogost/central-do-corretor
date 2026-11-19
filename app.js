@@ -13,6 +13,7 @@ function num(v){ var n = Number(v); return isFinite(n) ? n : 0; }
 function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
 function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function soDigitos(s){ return String(s||'').replace(/\D/g,''); }
+function parseNumBR(s){ return num(String(s||'').replace(/\./g,'').replace(',','.')); }
 function waLink(fone,texto){
   var d = soDigitos(fone);
   if(d && d.length<=11) d = '55'+d;
@@ -161,6 +162,7 @@ function renderFollowup(){
         '<div class="det">'+esc(c.empreendimento||'')+(c.etapa?' · '+esc(c.etapa):'')+(c.nota?' · '+esc(c.nota):'')+'</div></div></div>'+
         '<div class="cliente-acoes">'+
         (c.whatsapp?'<a class="botao meio" target="_blank" rel="noopener" href="'+waLink(c.whatsapp,'Olá '+c.nome+', tudo bem?')+'">Chamar no WhatsApp</a>':'')+
+        '<button class="botao meio fantasma" data-radar="'+i+'">🧠 Radar</button>'+
         '<button class="botao meio fantasma" data-feito="'+i+'">Feito</button>'+
         '</div></div>';
     }).join('');
@@ -172,6 +174,7 @@ function renderFollowup(){
       '<div class="det">'+esc(c.etapa||'')+(c.empreendimento?' · '+esc(c.empreendimento):'')+(c.proximo?' · retorno '+esc(c.proximo.split('-').reverse().join('/')):'')+'</div>'+
       '</div></div>'+
       '<div class="cliente-acoes">'+
+      '<button class="botao meio fantasma" data-radar="'+i+'">🧠 Radar</button>'+
       '<button class="botao meio fantasma" data-editar="'+i+'">Editar</button>'+
       '<button class="botao meio fantasma" data-excluir="'+i+'">Excluir</button>'+
       '</div></div>';
@@ -217,6 +220,13 @@ function renderFollowup(){
       var c=lista[Number(bt.getAttribute('data-feito'))];
       c.ultimoContato=hojeISO(); c.proximo='';
       salvarFU(lista); renderFollowup();
+    });
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-radar]'),function(bt){
+    bt.addEventListener('click',function(){
+      var c=lista[Number(bt.getAttribute('data-radar'))];
+      try{ sessionStorage.setItem(CHAVE_RD_PRE, JSON.stringify({nome:c.nome, nota:c.nota||''})); }catch(e){}
+      location.hash='#/radar';
     });
   });
   Array.prototype.forEach.call(document.querySelectorAll('[data-excluir]'),function(bt){
@@ -340,6 +350,111 @@ function renderComissao(){
   calc();
 }
 
+/* ---------------- RADAR DE LOTES ---------------- */
+var CHAVE_RD_PRE='central-radar-prefill';
+
+function prefillRadarDoCliente(){
+  try{
+    var raw=sessionStorage.getItem(CHAVE_RD_PRE);
+    if(!raw) return null;
+    sessionStorage.removeItem(CHAVE_RD_PRE);
+    return JSON.parse(raw);
+  }catch(e){ return null; }
+}
+
+function extraiPerfil(nota){
+  var p={max:'',areaMin:''};
+  var t=String(nota||'');
+  var mA=t.match(/(\d[\d\.,]*)\s*m\u00B2/i);
+  if(mA) p.areaMin=mA[1];
+  var mR=t.match(/r\$\s*([\d\.,]+)\s*(mil)?/i);
+  if(mR){
+    var v=parseNumBR(mR[1]);
+    if(mR[2] && v<10000) v=v*1000;
+    if(v>0) p.max=String(v).replace('.',',');
+  }else{
+    var mM=t.match(/(\d+)\s*mil/i);
+    if(mM){ var v2=Number(mM[1])*1000; if(v2>=10000) p.max=String(v2); }
+  }
+  return p;
+}
+
+function radarMatch(perfil){
+  var max=parseNumBR(perfil.max), aMin=parseNumBR(perfil.areaMin);
+  var out=[];
+  DADOS.bundles.forEach(function(b){
+    if(perfil.bund && perfil.bund!=='all' && b.id!==perfil.bund) return;
+    b.rows.forEach(function(r){
+      var preco=num(r.cash_value_brl), area=num(r.area_m2);
+      if(max>0 && preco>max) return;
+      if(aMin>0 && area<aMin) return;
+      out.push({b:b,r:r,m2:area>0?preco/area:Infinity});
+    });
+  });
+  out.sort(function(x,y){ return x.m2-y.m2; });
+  return out;
+}
+
+function renderRadar(){
+  var pre=prefillRadarDoCliente()||{};
+  var perfil=Object.assign({nome:'',max:'',areaMin:'',bund:'all'}, pre.campos||extraiPerfil(pre.nota||''));
+  if(pre.nome) perfil.nome=pre.nome;
+  if(pre.campos==null && pre.nota && pre.nome==null) perfil.nome='';
+
+  function desenha(){
+    var lista=radarMatch(perfil);
+    var top=lista.slice(0,8);
+    var linhas=top.map(function(it,i){
+      var r=it.r;
+      return '<div class="linha-lote" data-rd="'+i+'">'+
+        '<div><div class="ql">Q'+esc(r.quadra)+' · L'+esc(r.lote)+(r.stage?' <span class="info">'+esc(r.stage)+'</span>':'')+'</div>'+
+        '<div class="info">'+esc(rotuloCurto(it.b))+' · '+esc(r.area_m2)+' m² · <span class="por-m2">'+brl(it.m2)+'/m²</span></div></div>'+
+        '<div class="valor">'+brl(r.cash_value_brl)+'</div></div>';
+    }).join('');
+    var resumo = perfil.nome ? 'Para <strong>'+esc(perfil.nome)+'</strong>: ' : '';
+    app.innerHTML =
+      '<h1>Radar de Lotes</h1>'+
+      '<div class="radar-heroi"><div class="titulo">🧠 Qual lote oferecer para cada cliente?</div>'+
+      '<div class="det" style="color:var(--suave);font-size:13px">Diga o perfil e o Radar cruza com as 662 tabelas oficiais de novembro, ordenando pelo melhor preço por m².</div></div>'+
+      '<div class="cartao">'+
+      '<label>Nome do cliente (opcional)</label><input id="r-nome" placeholder="Ex.: João" value="'+esc(perfil.nome||'')+'">'+
+      '<div class="dois"><div><label>Preço máximo (R$)</label><input id="r-max" inputmode="decimal" placeholder="Ex.: 110000" value="'+esc(perfil.max||'')+'"></div>'+
+      '<div><label>Área mínima (m²)</label><input id="r-area" inputmode="decimal" placeholder="Ex.: 250" value="'+esc(perfil.areaMin||'')+'"></div></div>'+
+      '<label>Loteamento</label><select id="r-bund"><option value="all">Todos</option>'+DADOS.bundles.map(function(b){return '<option value="'+b.id+'"'+(perfil.bund===b.id?' selected':'')+'>'+esc(rotuloCurto(b))+'</option>';}).join('')+'</select>'+
+      '<div style="height:12px"></div>'+
+      '<button class="botao ouro" id="r-go">Rodar o Radar</button>'+
+      '</div>'+
+      '<h2>'+(top.length? resumo+top.length+' lote'+(top.length>1?'s':'')+' encontrado'+(top.length>1?'s':''):'Nenhum lote nesse perfil')+'</h2>'+
+      linhas+
+      (top.length? '<div style="height:8px"></div><button class="botao" id="r-share">Enviar seleção no WhatsApp</button>':'')+
+      '<div class="vazio" style="padding-top:14px">Valores à vista das tabelas oficiais novembro/2026. Disponibilidade sob confirmação.</div>';
+
+    function relê(){
+      perfil.nome=document.getElementById('r-nome').value.trim();
+      perfil.max=document.getElementById('r-max').value;
+      perfil.areaMin=document.getElementById('r-area').value;
+      perfil.bund=document.getElementById('r-bund').value;
+    }
+    document.getElementById('r-go').addEventListener('click',function(){ relê(); desenha(); });
+    document.getElementById('r-bund').addEventListener('change',function(){ relê(); desenha(); });
+    Array.prototype.forEach.call(document.querySelectorAll('[data-rd]'),function(el){
+      el.addEventListener('click',function(){
+        var it=top[Number(el.getAttribute('data-rd'))];
+        abrirFicha(it.b,it.r);
+      });
+    });
+    var sh=document.getElementById('r-share');
+    if(sh) sh.addEventListener('click',function(){
+      var nome=document.getElementById('r-nome').value.trim();
+      var txt='Oi'+(nome?' '+nome:'')+', separei estes lotes para você:\n\n'+
+        top.slice(0,3).map(function(it){ return fichaTexto(it.b,it.r); }).join('\n\n—\n\n')+
+        '\n\nPosso te mandar mais opções ou agendar uma visita?';
+      window.open(waLink('',txt),'_blank');
+    });
+  }
+  desenha();
+}
+
 /* ---------------- HOME ---------------- */
 function renderHome(){
   var total = DADOS.bundles.reduce(function(a,b){return a+b.rows.length;},0);
@@ -347,6 +462,7 @@ function renderHome(){
     '<h1>Central do Corretor</h1>'+
     '<p class="sub">Tabelas, follow-up e comissão em um só lugar. Feito para o corretor vender no celular.</p>'+
     '<div class="grade3">'+
+    '<div class="cartao cartao-toque" data-go="radar"><h3>🧠 Radar</h3><div class="det">Qual lote oferecer para cada cliente, pelo melhor preço por m²</div></div>'+
     '<div class="cartao cartao-toque" data-go="tabelas"><h3>📋 Tabelas</h3><div class="det">'+DADOS.bundles.length+' loteamentos · '+total+' lotes · tabelas novembro/2026</div></div>'+
     '<div class="cartao cartao-toque" data-go="followup"><h3>📞 Follow-up</h3><div class="det">Quem chamar hoje, com link direto pro WhatsApp</div></div>'+
     '<div class="cartao cartao-toque" data-go="comissao"><h3>🧮 Comissão</h3><div class="det">Quanto você ganha por venda, do seu jeito</div></div>'+
@@ -365,6 +481,7 @@ function rota(){
     a.classList.toggle('ativa', a.getAttribute('data-rota')===nome);
   });
   if(nome==='tabelas') renderTabelas();
+  else if(nome==='radar') renderRadar();
   else if(nome==='followup') renderFollowup();
   else if(nome==='comissao') renderComissao();
   else renderHome();
