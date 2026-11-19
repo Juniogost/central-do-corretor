@@ -72,3 +72,8 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--ouro);outline-of
 .radar-score{font-size:11px;color:var(--bronze);font-weight:700}
 .por-m2{font-size:12px;color:var(--suave)}
 @media (min-width:560px){.grade3{grid-template-columns:repeat(2,1fr)}}
+
+/* Mapa */
+.mapa-box{height:320px;border-radius:12px;overflow:hidden;background:#0a0a0c;border:1px solid rgba(201,168,76,.25);z-index:0}
+.mapa-planta-box{height:340px}
+.leaflet-popup-content a.pop-tabela{color:#8a6d1f;font-weight:700}

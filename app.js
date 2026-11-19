@@ -133,6 +133,90 @@ function copiar(txt){
   try{ document.execCommand('copy'); }catch(e){} ta.remove();
 }
 
+
+/* ---------------- MAPA ---------------- */
+var MAPA_PINS = [
+  {nome:'Parque dos Buritis', cidade:'Senador Canedo - GO', lat:-16.6786414, lng:-49.1414431, end:'R. RPB 4 - Girassóis, Sen. Canedo', bundle:'buritis-nov'},
+  {nome:'Jardim Scala', cidade:'Trindade - GO', lat:-16.6325383, lng:-49.4154748, end:'Av. Tiradentes, lt. 43 - St. Cristina I', bundle:'scala-jardim-nov'},
+  {nome:'Recanto das Emas', cidade:'Goiânia - GO', lat:-16.7382467, lng:-49.3673868, end:'Av. Eli Alves Forte, esq. Rua Rita Caetano', bundle:'recanto-nov'},
+  {nome:'Jardim dos Ipês', cidade:'Aparecida de Goiânia - GO', lat:-16.8308595, lng:-49.3793755, end:'Av. Ji Oito, Qd 10 Lt 17 - Jardim dos Ipês', bundle:'ipes-nov'}
+];
+var MAPA_PLANTAS = [
+  {img:'maps/map-1.webp', label:'Jardim dos Ipês · etapas 1ª e 2ª', bundle:'ipes-nov'},
+  {img:'maps/map-2.webp', label:'Jardim dos Ipês · 3ª etapa', bundle:'ipes-nov'},
+  {img:'maps/map-3.webp', label:'Recanto das Emas', bundle:'recanto-nov'},
+  {img:'maps/map-4.webp', label:'Parque dos Buritis', bundle:'buritis-nov'},
+  {img:'maps/map-5.webp', label:'Jardim das Aroeiras', bundle:'aroeiras-nov'},
+  {img:'maps/map-6.webp', label:'Jardim dos Angicos', bundle:'angicos-nov'},
+  {img:'maps/map-7.webp', label:'Jardim dos Jacarandás', bundle:'jacarandas-nov'},
+  {img:'maps/map-8.webp', label:'Jardim Scala', bundle:'scala-jardim-nov'}
+];
+var mapaSat = null, mapaPlanta = null, plantaSel = null;
+
+function irParaTabela(bundle){
+  estadoTab.bundle = bundle;
+  estadoTab.q = '';
+  location.hash = '#/tabelas';
+}
+
+function renderMapa(){
+  if(mapaSat){ mapaSat.remove(); mapaSat=null; }
+  if(mapaPlanta){ mapaPlanta.remove(); mapaPlanta=null; plantaSel=null; }
+  if(typeof L === 'undefined'){
+    app.innerHTML = '<div class="aviso">O mapa precisa de internet para carregar. Tente de novo.</div>';
+    return;
+  }
+  app.innerHTML =
+    '<h1>Mapa</h1>'+
+    '<p class="sub">Onde fica cada loteamento e a planta de referência para mostrar ao cliente.</p>'+
+    '<div class="cartao"><h3>Satélite · pontos de referência</h3>'+
+    '<div id="mapa-sat" class="mapa-box"></div>'+
+    '<div class="det" style="margin-top:8px">Pontos de referência verificados em 30/09/2026 no Google Maps. Não marcam lotes nem o perímetro do loteamento.</div></div>'+
+    '<div class="cartao" style="margin-top:12px"><h3>Planta de referência</h3>'+
+    '<div class="chips" id="planta-chips">'+
+      MAPA_PLANTAS.map(function(p,i){ return '<button class="chip" data-p="'+i+'">'+esc(p.label)+'</button>'; }).join('')+
+    '</div>'+
+    '<div id="mapa-planta" class="mapa-box mapa-planta-box"><div class="det" style="padding:24px;text-align:center">Escolha um loteamento acima para abrir a planta com zoom.</div></div>'+
+    '<div class="det" style="margin-top:8px">Planta de referência do material recebido do Grupo NB. Não é estoque atual e não representa disponibilidade de lotes.</div></div>';
+
+  mapaSat = L.map('mapa-sat',{attributionControl:true}).setView([-16.71,-49.20], 10);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',{
+    maxZoom:19, attribution:'Imagens: Esri, Maxar, Earthstar Geographics'
+  }).addTo(mapaSat);
+  MAPA_PINS.forEach(function(p){
+    var m = L.circleMarker([p.lat,p.lng],{radius:9,color:'#c9a84c',weight:2,fillColor:'#c9a84c',fillOpacity:0.9}).addTo(mapaSat);
+    m.bindPopup('<b>'+esc(p.nome)+'</b><br>'+esc(p.cidade)+'<br><span style="color:#888">'+esc(p.end)+'</span><br><a href="#/tabelas" data-bundle="'+p.bundle+'" class="pop-tabela">Ver tabela novembro/2026</a>');
+  });
+  document.getElementById('mapa-sat').addEventListener('click',function(e){
+    var a = e.target.closest ? e.target.closest('.pop-tabela') : null;
+    if(a){ e.preventDefault(); irParaTabela(a.getAttribute('data-bundle')); }
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('#planta-chips .chip'),function(c){
+    c.addEventListener('click',function(){
+      Array.prototype.forEach.call(document.querySelectorAll('#planta-chips .chip'),function(x){x.classList.remove('ativa');});
+      c.classList.add('ativa');
+      abrirPlanta(Number(c.getAttribute('data-p')));
+    });
+  });
+}
+
+function abrirPlanta(i){
+  var p = MAPA_PLANTAS[i];
+  if(mapaPlanta){ mapaPlanta.remove(); mapaPlanta=null; }
+  var el = document.getElementById('mapa-planta');
+  el.innerHTML = '';
+  var im = new Image();
+  im.onload = function(){
+    mapaPlanta = L.map(el,{crs:L.CRS.Simple, minZoom:-4, maxZoom:3, attributionControl:false, zoomSnap:0.25});
+    var b = [[0,0],[im.naturalHeight, im.naturalWidth]];
+    L.imageOverlay(p.img, b).addTo(mapaPlanta);
+    mapaPlanta.fitBounds(b);
+    mapaPlanta.setMaxBounds([[-im.naturalHeight*0.5,-im.naturalWidth*0.5],[im.naturalHeight*1.5, im.naturalWidth*1.5]]);
+  };
+  im.onerror = function(){ el.innerHTML = '<div class="aviso" style="margin:16px">Não consegui abrir a planta. Verifique a internet.</div>'; };
+  im.src = p.img;
+}
+
 /* ---------------- FOLLOW-UP ---------------- */
 var CHAVE_FU='central-followup-v1';
 var ETAPAS=['novo','conversa','visita','proposta','ganho','perdido'];
@@ -463,6 +547,7 @@ function renderHome(){
     '<p class="sub">Tabelas, follow-up e comissão em um só lugar. Feito para o corretor vender no celular.</p>'+
     '<div class="grade3">'+
     '<div class="cartao cartao-toque" data-go="radar"><h3>🧠 Radar</h3><div class="det">Qual lote oferecer para cada cliente, pelo melhor preço por m²</div></div>'+
+    '<div class="cartao cartao-toque" data-go="mapa"><h3>🗺️ Mapa</h3><div class="det">Satélite com os loteamentos e planta com zoom para mostrar ao cliente</div></div>'+
     '<div class="cartao cartao-toque" data-go="tabelas"><h3>📋 Tabelas</h3><div class="det">'+DADOS.bundles.length+' loteamentos · '+total+' lotes · tabelas novembro/2026</div></div>'+
     '<div class="cartao cartao-toque" data-go="followup"><h3>📞 Follow-up</h3><div class="det">Quem chamar hoje, com link direto pro WhatsApp</div></div>'+
     '<div class="cartao cartao-toque" data-go="comissao"><h3>🧮 Comissão</h3><div class="det">Quanto você ganha por venda, do seu jeito</div></div>'+
@@ -481,6 +566,7 @@ function rota(){
     a.classList.toggle('ativa', a.getAttribute('data-rota')===nome);
   });
   if(nome==='tabelas') renderTabelas();
+  else if(nome==='mapa') renderMapa();
   else if(nome==='radar') renderRadar();
   else if(nome==='followup') renderFollowup();
   else if(nome==='comissao') renderComissao();
