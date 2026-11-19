@@ -539,6 +539,107 @@ function renderRadar(){
   desenha();
 }
 
+
+/* ---------------- POST DO LOTE DO DIA ---------------- */
+var postSel = {bundle:null, idx:-1};
+
+function loteDoDiaAuto(){
+  var lista = radarMatch({});
+  var top = lista.slice(0,20);
+  if(!top.length) return null;
+  var hoje = new Date();
+  var diaAno = Math.floor((hoje - new Date(hoje.getFullYear(),0,0))/864e5);
+  return top[diaAno % top.length];
+}
+
+function desenhaPost(cv, b, r){
+  var W=1080, H=1350; cv.width=W; cv.height=H;
+  var x = cv.getContext('2d');
+  var g = x.createLinearGradient(0,0,W,H);
+  g.addColorStop(0,'#fdfaf6'); g.addColorStop(.55,'#f8f1e8'); g.addColorStop(1,'#f5e9dc');
+  x.fillStyle=g; x.fillRect(0,0,W,H);
+  x.strokeStyle='#b8912f'; x.lineWidth=3; x.strokeRect(28,28,W-56,H-56);
+  function centro(t,y,fonte,cor){ x.font=fonte; x.fillStyle=cor; x.textAlign='center'; x.fillText(t,W/2,y); }
+  try{ x.letterSpacing='10px'; }catch(e){}
+  centro('INVESTE CANEDO',110,'700 44px -apple-system, "Segoe UI", Arial','#8a6d1f');
+  try{ x.letterSpacing='4px'; }catch(e){}
+  var hoje=new Date();
+  var dataBR=String(hoje.getDate()).padStart(2,'0')+'/'+String(hoje.getMonth()+1).padStart(2,'0')+'/'+hoje.getFullYear();
+  centro('LOTE DO DIA · '+dataBR,168,'600 30px -apple-system, "Segoe UI", Arial','#716a5a');
+  try{ x.letterSpacing='0px'; }catch(e){}
+  function rr(px,py,pw,ph,rad){ x.beginPath(); x.moveTo(px+rad,py); x.arcTo(px+pw,py,px+pw,py+ph,rad); x.arcTo(px+pw,py+ph,px,py+ph,rad); x.arcTo(px,py+ph,px,py,rad); x.arcTo(px,py,px+pw,py,rad); x.closePath(); }
+  x.save(); x.shadowColor='rgba(120,90,50,.25)'; x.shadowBlur=40; x.shadowOffsetY=12;
+  rr(90,230,W-180,840,36); x.fillStyle='#ffffff'; x.fill(); x.restore();
+  rr(90,230,W-180,840,36); x.strokeStyle='#e9e2d2'; x.lineWidth=2; x.stroke();
+  var nome = b.label.replace(/\s*·\s*novembro\/2026.*$/,'').replace(/\s*·\s*/g,' · ');
+  centro(nome.toUpperCase(),330,'700 34px -apple-system, "Segoe UI", Arial','#8a6d1f');
+  centro('QUADRA '+r.quadra+' · LOTE '+r.lote,470,'800 96px -apple-system, "Segoe UI", Arial','#26221a');
+  centro(num(r.area_m2).toLocaleString('pt-BR')+' m²',545,'600 44px -apple-system, "Segoe UI", Arial','#716a5a');
+  x.strokeStyle='#e9e2d2'; x.lineWidth=2; x.beginPath(); x.moveTo(190,610); x.lineTo(W-190,610); x.stroke();
+  centro('À VISTA',680,'600 30px -apple-system, "Segoe UI", Arial','#716a5a');
+  centro(brl(r.cash_value_brl),790,'800 88px -apple-system, "Segoe UI", Arial','#b8912f');
+  var area=num(r.area_m2), preco=num(r.cash_value_brl);
+  if(area>0) centro(brl(preco/area)+' por m²',860,'600 36px -apple-system, "Segoe UI", Arial','#8a6d1f');
+  if(num(r.discount_brl)>0){
+    rr(W/2-260,905,520,72,36); x.fillStyle='#eaf8ef'; x.fill(); x.strokeStyle='#b9e2c6'; x.lineWidth=2; x.stroke();
+    centro('DESCONTO DE '+brl(r.discount_brl),952,'700 30px -apple-system, "Segoe UI", Arial','#1f6b3a');
+  }
+  centro('Disponibilidade sob confirmação · Tabela '+(b.month||'novembro/2026'),1180,'500 28px -apple-system, "Segoe UI", Arial','#716a5a');
+  centro('WhatsApp (62) 98216-5619',1236,'700 34px -apple-system, "Segoe UI", Arial','#26221a');
+}
+
+function renderPost(){
+  var auto = postSel.idx<0 ? loteDoDiaAuto() : null;
+  var bAtual = auto ? auto.b : DADOS.bundles.filter(function(b){return b.id===postSel.bundle;})[0];
+  if(!bAtual) bAtual = DADOS.bundles[0];
+  var rows = bAtual.rows.map(function(r){ return {r:r, m2:num(r.area_m2)>0?num(r.cash_value_brl)/num(r.area_m2):Infinity}; })
+    .sort(function(a,b2){return a.m2-b2.m2;});
+  var rAtual = auto ? auto.r : (rows[postSel.idx]||rows[0]).r;
+  app.innerHTML =
+    '<h1>Post do lote do dia</h1>'+
+    '<p class="sub">Imagem pronta com a sua marca para postar ou mandar no WhatsApp. Trocar de lote é só escolher abaixo.</p>'+
+    '<div class="chips">'+
+      DADOS.bundles.map(function(b){ return '<button class="chip'+(b.id===bAtual.id?' ativa':'')+'" data-pb="'+b.id+'">'+esc(rotuloCurto(b))+'</button>'; }).join('')+
+    '</div>'+
+    '<select id="post-lote">'+
+      rows.map(function(it,i){ return '<option value="'+i+'"'+((!auto && (rows[postSel.idx]||rows[0]).r===it.r)?' selected':'')+'>Q'+it.r.quadra+' L'+it.r.lote+' · '+num(it.r.area_m2).toLocaleString('pt-BR')+' m² · '+brl(it.r.cash_value_brl)+'</option>'; }).join('')+
+    '</select>'+
+    '<div style="height:10px"></div>'+
+    '<button class="botao fantasma" id="post-auto">🎲 Lote do dia de hoje (melhor R$/m²)</button>'+
+    '<div class="cartao" style="margin-top:14px;padding:10px"><canvas id="post-cv" style="width:100%;border-radius:10px;display:block"></canvas></div>'+
+    '<div class="dois">'+
+      '<div><button class="botao ouro" id="post-baixar">⬇️ Baixar imagem</button></div>'+
+      '<div><button class="botao" id="post-share">📤 Compartilhar</button></div>'+
+    '</div>'+
+    '<div class="aviso" style="margin-top:12px">A imagem sai com valor da tabela novembro/2026 e aviso de disponibilidade sob confirmação. Confira o lote antes de postar.</div>';
+  var cv=document.getElementById('post-cv');
+  desenhaPost(cv,bAtual,rAtual);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-pb]'),function(c){
+    c.addEventListener('click',function(){ postSel={bundle:c.getAttribute('data-pb'),idx:0}; renderPost(); });
+  });
+  document.getElementById('post-lote').addEventListener('change',function(e){ postSel={bundle:bAtual.id,idx:Number(e.target.value)}; renderPost(); });
+  document.getElementById('post-auto').addEventListener('click',function(){ postSel={bundle:null,idx:-1}; renderPost(); });
+  function texto(){ return fichaTexto(bAtual,rAtual)+'\n\nMe chama aqui no WhatsApp para garantir: (62) 98216-5619'; }
+  document.getElementById('post-baixar').addEventListener('click',function(){
+    cv.toBlob(function(blob){
+      var a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+      a.download='lote-do-dia-q'+rAtual.quadra+'-l'+rAtual.lote+'.png'; a.click();
+      setTimeout(function(){URL.revokeObjectURL(a.href);},4000);
+    },'image/png');
+  });
+  document.getElementById('post-share').addEventListener('click',function(){
+    cv.toBlob(function(blob){
+      var file=new File([blob],'lote-do-dia.png',{type:'image/png'});
+      if(navigator.canShare && navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:'Lote do dia',text:texto()}).catch(function(){});
+      }else{
+        var a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download='lote-do-dia.png'; a.click();
+        window.open(waLink('',texto()),'_blank');
+      }
+    },'image/png');
+  });
+}
+
 /* ---------------- HOME ---------------- */
 function renderHome(){
   var total = DADOS.bundles.reduce(function(a,b){return a+b.rows.length;},0);
@@ -548,6 +649,7 @@ function renderHome(){
     '<div class="grade3">'+
     '<div class="cartao cartao-toque" data-go="radar"><h3>🧠 Radar</h3><div class="det">Qual lote oferecer para cada cliente, pelo melhor preço por m²</div></div>'+
     '<div class="cartao cartao-toque" data-go="mapa"><h3>🗺️ Mapa</h3><div class="det">Satélite com os loteamentos e planta com zoom para mostrar ao cliente</div></div>'+
+    '<div class="cartao cartao-toque" data-go="post"><h3>📣 Post do dia</h3><div class="det">Imagem pronta do lote em destaque para você postar</div></div>'+
     '<div class="cartao cartao-toque" data-go="tabelas"><h3>📋 Tabelas</h3><div class="det">'+DADOS.bundles.length+' loteamentos · '+total+' lotes · tabelas novembro/2026</div></div>'+
     '<div class="cartao cartao-toque" data-go="followup"><h3>📞 Follow-up</h3><div class="det">Quem chamar hoje, com link direto pro WhatsApp</div></div>'+
     '<div class="cartao cartao-toque" data-go="comissao"><h3>🧮 Comissão</h3><div class="det">Quanto você ganha por venda, do seu jeito</div></div>'+
@@ -567,6 +669,7 @@ function rota(){
   });
   if(nome==='tabelas') renderTabelas();
   else if(nome==='mapa') renderMapa();
+  else if(nome==='post') renderPost();
   else if(nome==='radar') renderRadar();
   else if(nome==='followup') renderFollowup();
   else if(nome==='comissao') renderComissao();
