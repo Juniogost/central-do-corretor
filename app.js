@@ -724,6 +724,60 @@ function renderPainel(){
   });
 }
 
+
+/* ---------------- SIMULADOR PIX ---------------- */
+var pixSel = {bundle:null, idx:0};
+
+function renderPix(){
+  var bAtual = DADOS.bundles.filter(function(b){return b.id===pixSel.bundle;})[0] || DADOS.bundles[0];
+  var rows = bAtual.rows.map(function(r){ return {r:r, preco:num(r.cash_value_brl)}; })
+    .sort(function(a,b2){return a.preco-b2.preco;});
+  var it = rows[pixSel.idx]||rows[0];
+  var r = it.r;
+  var vista = num(r.cash_value_brl);
+  var cheio = num(r.list_value_brl)>vista ? num(r.list_value_brl) : (num(r.discount_brl)>0 ? vista+num(r.discount_brl) : 0);
+  var economia = cheio>0 ? cheio-vista : 0;
+  var pct = (cheio>0 && economia>0) ? economia/cheio*100 : 0;
+  app.innerHTML =
+    '<h1>Simulador Pix</h1>'+
+    '<p class="sub">Quanto o cliente paga à vista no Pix e quanto ele economiza. Escolha o lote:</p>'+
+    '<div class="chips">'+
+      DADOS.bundles.map(function(b){ return '<button class="chip'+(b.id===bAtual.id?' ativa':'')+'" data-xb="'+b.id+'">'+esc(rotuloCurto(b))+'</button>'; }).join('')+
+    '</div>'+
+    '<select id="pix-lote">'+
+      rows.map(function(o,i){ return '<option value="'+i+'"'+(o===it?' selected':'')+'>Q'+o.r.quadra+' L'+o.r.lote+' · '+num(o.r.area_m2).toLocaleString('pt-BR')+' m² · '+brl(o.r.cash_value_brl)+'</option>'; }).join('')+
+    '</select>'+
+    '<div class="resultado">'+
+      '<div style="font-size:13px;color:var(--suave);font-weight:600">À VISTA NO PIX</div>'+
+      '<div class="grande">'+brl(vista)+'</div>'+
+      '<dl>'+
+        '<dt>Lote</dt><dd>Q'+r.quadra+' · L'+r.lote+'</dd>'+
+        '<dt>Área</dt><dd>'+num(r.area_m2).toLocaleString('pt-BR')+' m²</dd>'+
+        '<dt>Por m²</dt><dd>'+(num(r.area_m2)>0?brl(vista/num(r.area_m2)):'—')+'</dd>'+
+        (economia>0 ? '<dt>Você economiza</dt><dd style="color:#1f6b3a">'+brl(economia)+(pct>0?' ('+pct.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%)':'')+'</dd>' : '<dt>Economia</dt><dd>—</dd>')+
+      '</dl>'+
+    '</div>'+
+    '<div style="height:12px"></div>'+
+    '<div class="dois">'+
+      '<div><button class="botao" id="pix-share">📤 Mandar no WhatsApp</button></div>'+
+      '<div><button class="botao fantasma" id="pix-ficha">Ver ficha do lote</button></div>'+
+    '</div>'+
+    '<div class="aviso" style="margin-top:12px">Valores da tabela '+(bAtual.month||'novembro/2026')+'. A economia vem do desconto informado na própria tabela. Disponibilidade sob confirmação.</div>';
+  Array.prototype.forEach.call(document.querySelectorAll('[data-xb]'),function(c){
+    c.addEventListener('click',function(){ pixSel={bundle:c.getAttribute('data-xb'),idx:0}; renderPix(); });
+  });
+  document.getElementById('pix-lote').addEventListener('change',function(e){ pixSel={bundle:bAtual.id,idx:Number(e.target.value)}; renderPix(); });
+  document.getElementById('pix-share').addEventListener('click',function(){
+    var txt='À vista no Pix: '+brl(vista)+' — '+esc(rotuloCurto(bAtual)).replace(/&amp;/g,'&')+' Q'+r.quadra+' L'+r.lote+' ('+num(r.area_m2).toLocaleString('pt-BR')+' m²).'+
+      (economia>0 ? ' Você economiza '+brl(economia)+(pct>0?' ('+pct.toLocaleString('pt-BR',{maximumFractionDigits:1})+'%)':'')+' em relação ao valor cheio da tabela.' : '')+
+      ' Disponibilidade sob confirmação. Me chama para garantir: (62) 98216-5619';
+    window.open(waLink('',txt),'_blank');
+  });
+  document.getElementById('pix-ficha').addEventListener('click',function(){
+    irParaTabela(bAtual.id);
+  });
+}
+
 /* ---------------- HOME ---------------- */
 function renderHome(){
   var total = DADOS.bundles.reduce(function(a,b){return a+b.rows.length;},0);
@@ -737,6 +791,7 @@ function renderHome(){
     '<div class="cartao cartao-toque" data-go="tabelas"><h3>📋 Tabelas</h3><div class="det">'+DADOS.bundles.length+' loteamentos · '+total+' lotes · tabelas novembro/2026</div></div>'+
     '<div class="cartao cartao-toque" data-go="followup"><h3>📞 Follow-up</h3><div class="det">Quem chamar hoje, com link direto pro WhatsApp</div></div>'+
     '<div class="cartao cartao-toque" data-go="painel"><h3>📊 Painel</h3><div class="det">Raio-x das tabelas: melhor R$/m², menor valor, maiores descontos</div></div>'+
+    '<div class="cartao cartao-toque" data-go="pix"><h3>⚡ Pix</h3><div class="det">Simule o valor à vista no Pix e a economia do cliente</div></div>'+
     '<div class="cartao cartao-toque" data-go="comissao"><h3>🧮 Comissão</h3><div class="det">Quanto você ganha por venda, do seu jeito</div></div>'+
     '</div>'+
     '<div class="aviso verde" style="margin-top:14px">Versão de testes para apresentação. Os dados das tabelas vêm dos PDFs oficiais recebidos da loteadora; a disponibilidade de cada lote é confirmada na hora da venda.</div>';
@@ -756,6 +811,7 @@ function rota(){
   else if(nome==='mapa') renderMapa();
   else if(nome==='post') renderPost();
   else if(nome==='painel') renderPainel();
+  else if(nome==='pix') renderPix();
   else if(nome==='radar') renderRadar();
   else if(nome==='followup') renderFollowup();
   else if(nome==='comissao') renderComissao();
