@@ -573,11 +573,17 @@ function desenhaPost(cv, b, r){
   rr(90,230,W-180,840,36); x.strokeStyle='#e9e2d2'; x.lineWidth=2; x.stroke();
   var nome = b.label.replace(/\s*·\s*novembro\/2026.*$/,'').replace(/\s*·\s*/g,' · ');
   centro(nome.toUpperCase(),330,'700 34px -apple-system, "Segoe UI", Arial','#8a6d1f');
-  centro('QUADRA '+r.quadra+' · LOTE '+r.lote,470,'800 96px -apple-system, "Segoe UI", Arial','#26221a');
+  var qlTxt='QUADRA '+r.quadra+' · LOTE '+r.lote, qlSize=96;
+  x.font='800 '+qlSize+'px -apple-system, "Segoe UI", Arial';
+  while(x.measureText(qlTxt).width > W-260 && qlSize>40){ qlSize-=4; x.font='800 '+qlSize+'px -apple-system, "Segoe UI", Arial'; }
+  centro(qlTxt,470,'800 '+qlSize+'px -apple-system, "Segoe UI", Arial','#26221a');
   centro(num(r.area_m2).toLocaleString('pt-BR')+' m²',545,'600 44px -apple-system, "Segoe UI", Arial','#716a5a');
   x.strokeStyle='#e9e2d2'; x.lineWidth=2; x.beginPath(); x.moveTo(190,610); x.lineTo(W-190,610); x.stroke();
   centro('À VISTA',680,'600 30px -apple-system, "Segoe UI", Arial','#716a5a');
-  centro(brl(r.cash_value_brl),790,'800 88px -apple-system, "Segoe UI", Arial','#b8912f');
+  var vTxt=brl(r.cash_value_brl), vSize=88;
+  x.font='800 '+vSize+'px -apple-system, "Segoe UI", Arial';
+  while(x.measureText(vTxt).width > W-300 && vSize>36){ vSize-=4; x.font='800 '+vSize+'px -apple-system, "Segoe UI", Arial'; }
+  centro(vTxt,790,'800 '+vSize+'px -apple-system, "Segoe UI", Arial','#b8912f');
   var area=num(r.area_m2), preco=num(r.cash_value_brl);
   if(area>0) centro(brl(preco/area)+' por m²',860,'600 36px -apple-system, "Segoe UI", Arial','#8a6d1f');
   if(num(r.discount_brl)>0){
@@ -594,7 +600,11 @@ function renderPost(){
   if(!bAtual) bAtual = DADOS.bundles[0];
   var rows = bAtual.rows.map(function(r){ return {r:r, m2:num(r.area_m2)>0?num(r.cash_value_brl)/num(r.area_m2):Infinity}; })
     .sort(function(a,b2){return a.m2-b2.m2;});
-  var rAtual = auto ? auto.r : (rows[postSel.idx]||rows[0]).r;
+  if(auto){
+    var ai=0; rows.forEach(function(it,i){ if(it.r===auto.r) ai=i; });
+    postSel={bundle:bAtual.id, idx:ai};
+  }
+  var rAtual = (rows[postSel.idx]||rows[0]).r;
   app.innerHTML =
     '<h1>Post do lote do dia</h1>'+
     '<p class="sub">Imagem pronta com a sua marca para postar ou mandar no WhatsApp. Trocar de lote é só escolher abaixo.</p>'+
@@ -602,7 +612,7 @@ function renderPost(){
       DADOS.bundles.map(function(b){ return '<button class="chip'+(b.id===bAtual.id?' ativa':'')+'" data-pb="'+b.id+'">'+esc(rotuloCurto(b))+'</button>'; }).join('')+
     '</div>'+
     '<select id="post-lote">'+
-      rows.map(function(it,i){ return '<option value="'+i+'"'+((!auto && (rows[postSel.idx]||rows[0]).r===it.r)?' selected':'')+'>Q'+it.r.quadra+' L'+it.r.lote+' · '+num(it.r.area_m2).toLocaleString('pt-BR')+' m² · '+brl(it.r.cash_value_brl)+'</option>'; }).join('')+
+      rows.map(function(it,i){ return '<option value="'+i+'"'+(((rows[postSel.idx]||rows[0]).r===it.r)?' selected':'')+'>Q'+it.r.quadra+' L'+it.r.lote+' · '+num(it.r.area_m2).toLocaleString('pt-BR')+' m² · '+brl(it.r.cash_value_brl)+'</option>'; }).join('')+
     '</select>'+
     '<div style="height:10px"></div>'+
     '<button class="botao fantasma" id="post-auto">🎲 Lote do dia de hoje (melhor R$/m²)</button>'+
